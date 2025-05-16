@@ -1,0 +1,62 @@
+// create a Jenkinsfile for a simple pipeline
+// input parameters
+parameters {
+    string(name: 'CONFIG_FILE', defaultValue: 'config.yaml', description: 'Path to the configuration file')
+}
+
+pipeline {
+    agent any
+
+    stages {
+        stage('Reading configuration'){
+            steps {
+                script {
+                    // Read the configuration file
+                    def configFile = params.CONFIG_FILE
+                    echo "Reading configuration from ${configFile}"
+                    def config = readYaml file: configFile
+                    echo "Configuration: ${config}"
+                }
+            }
+        }
+
+        stage('Invoke builds'){
+            steps{
+                script{
+
+                    def srcDir = config.cmake_config.source_of_truth.build_dir
+                    def globalConfigs = config.cmake_config.source_of_truth.configs ?: ""
+                    def testDir = config.cmake_config.builds.test_dir
+
+                    echo "$srcDir"
+
+
+
+
+                    def builds = config.cmake_config.builds.findAll { k, v -> k.startsWith("build") && v instanceof Map }
+
+                    builds.each { key, build ->
+                        def buildName = build.name
+                        def buildConfigs = build.configs ?: ""
+                        def finalConfig = "${globalConfigs} ${buildConfigs}".trim()
+                        def buildOutputDir = "${testDir}/${buildName}"
+
+                        echo "Building '${buildName}' in '${buildOutputDir}' with configs: ${finalConfig}"
+
+
+                    }
+                }
+
+                }
+            }
+        }
+    }
+
+
+
+    post {
+        always {
+            echo 'This will always run after the pipeline completes.'
+        }
+    }
+}

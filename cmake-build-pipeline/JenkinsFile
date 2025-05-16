@@ -1,0 +1,118 @@
+//  a JenkinsFile to build iqtree
+// paramters
+//  1. git branch
+// 2. git url
+
+pipeline {
+    agent any
+    parameters {
+        string(name:'IQTREE_GIT_URL',defaultValue: 'https://github.com/Hashara/iqtree3.git')
+        string(name: 'BRANCH', defaultValue: 'master', description: 'Branch to build')
+        string(name: 'NCI_ALIAS', defaultValue: 'nci_gadi', description: 'ssh alias, if you do not have one, create one')
+
+        string(name: 'WORKING_DIR', defaultValue: '/scratch/dx61/sa0557/iqtree2/ci-cd', description: 'Working directory')
+        string(name: 'CMAKE_OPTIONS', defaultValue:'', description: 'State cmake options')
+
+    }
+    environment {
+        IQTREE_GIT_URL = "${params.IQTREE_GIT_URL}"
+        NCI_ALIAS = "${params.NCI_ALIAS}"
+        WORKING_DIR = "${params.WORKING_DIR}"
+        GIT_REPO = "iqtree3"
+        BUILD_SCRIPTS = "${WORKING_DIR}/build-scripts"
+        IQTREE_DIR = "${WORKING_DIR}/${GIT_REPO}"
+        BUILD_OUTPUT_DIR = "${WORKING_DIR}/builds"
+
+        BUILD_GENERIC = "${BUILD_OUTPUT_DIR}"
+        CMAKE_OPTIONS="${params.CMAKE_OPTIONS}"
+
+
+    }
+    stages {
+        // ssh to NCI_ALIAS and scp build-scripts to working dir in NCI
+        stage('Copy build scripts') {
+            steps {
+                script {
+                    sh "pwd"
+                    sh """
+                        ssh ${NCI_ALIAS} << EOF
+                        mkdir -p ${WORKING_DIR}
+                        mkdir -p ${BUILD_SCRIPTS}
+                        exit
+                        EOF
+                        """
+                    sh "scp -r build-scripts/* ${NCI_ALIAS}:${BUILD_SCRIPTS}"
+                }
+            }
+        }
+        stage('Setup environment') {
+            steps {
+                script {
+                    sh """
+                        ssh ${NCI_ALIAS} << EOF
+                        mkdir -p ${WORKING_DIR}
+                        cd  ${WORKING_DIR}
+                        git clone --recursive ${IQTREE_GIT_URL}
+                        cd ${GIT_REPO}
+                        git checkout ${params.BRANCH}
+                        mkdir -p ${BUILD_OUTPUT_DIR}
+                        mkdir -p ${BUILD_SCRIPTS}
+                        cd ${BUILD_OUTPUT_DIR}
+                        rm -rf *
+                        exit
+
+                        """
+
+                    // create env.sh file if NN or GPU is enabled
+//                     if ("${params.NN}" == "true" || "${params.GPU}" == "true") {
+//                         def envFileContent = """
+// export ONNX_NN=${params.ONNX_NN}
+// export ONNX_NN_GPU=${params.ONNX_NN_GPU}
+// """
+//                         writeFile file: "env.sh", text: envFileContent
+//
+//                         sh "scp env.sh ${NCI_ALIAS}:${BUILD_SCRIPTS}"
+//                     }
+
+                }
+            }
+        }
+
+        stage("Build: Build MPI") {
+            steps {
+
+                script {
+                    sh """
+                        ssh ${NCI_ALIAS} << EOF
+                        echo "building..."
+                        sh ${BUILD_SCRIPTS}/jenkins-cmake-build-generic.sh ${BUILD_GENERIC} ${IQTREE_DIR} ${CMAKE_OPTIONS}
+                        exit
+
+                        """
+                }
+            }
+        }
+
+        stage('Verify') {
+            steps {
+                script {
+                    sh "ssh ${NCI_ALIAS} 'cd ${WORKING_DIR} && ls -l'"
+
+                }
+            }
+        }
+
+
+    }
+    post {
+        always {
+            echo 'Cleaning up workspace'
+            cleanWs()
+        }
+    }
+}
+
+def void cleanWs() {
+    // ssh to NCI_ALIAS and remove the working directory
+    sh "ssh ${NCI_ALIAS} 'rm -rf ${IQTREE_DIR} ${BUILD_SCRIPTS}'"
+}

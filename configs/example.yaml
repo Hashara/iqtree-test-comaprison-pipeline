@@ -1,0 +1,20 @@
+source_of_truth_repo:
+  git_link: "https://github.com/iqtree/iqtree3.git"
+  branch: "master"
+test_repo:
+  git_link: "https://github.com/Hashara/iqtree3.git"
+  branch: "nosse"
+
+cmake_config:
+  source_of_truth:
+    build_dir: "source_of_truth"
+    configs: ""
+  builds:
+    number_of_builds: 2
+    test_dir: "build"
+    build1:
+      name: "vanila"
+      configs: ""
+    build2:
+      name: "karnel_x86"
+      configs: "-DKERNEL_X86=ON"
